@@ -18,11 +18,12 @@
 namespace Google\Cloud\Samples\Dlp;
 
 # [START inspect_string]
-use Google\Cloud\Dlp\V2beta1\DlpServiceClient;
-use Google\Cloud\Dlp\V2beta1\ContentItem;
-use Google\Cloud\Dlp\V2beta1\InfoType;
-use Google\Cloud\Dlp\V2beta1\InspectConfig;
-use Google\Cloud\Dlp\V2beta1\Likelihood;
+use Google\Cloud\Dlp\V2beta2\DlpServiceClient;
+use Google\Cloud\Dlp\V2beta2\ContentItem;
+use Google\Cloud\Dlp\V2beta2\InfoType;
+use Google\Cloud\Dlp\V2beta2\InspectConfig;
+use Google\Cloud\Dlp\V2beta2\Likelihood;
+use Google\Cloud\Dlp\V2beta2\InspectConfig_FindingLimits;
 
 /**
  * Inspect a string using the Data Loss Prevention (DLP) API.
@@ -30,6 +31,7 @@ use Google\Cloud\Dlp\V2beta1\Likelihood;
  * @param string $string The text to inspect
  */
 function inspect_string(
+    $callingProject,
     $string,
     $minLikelihood = likelihood::LIKELIHOOD_UNSPECIFIED,
     $maxFindings = 0)
@@ -38,19 +40,23 @@ function inspect_string(
     $dlp = new DlpServiceClient();
 
     // The infoTypes of information to match
-    $usMaleNameInfoType = new InfoType();
-    $usMaleNameInfoType->setName('US_MALE_NAME');
-    $usFemaleNameInfoType = new InfoType();
-    $usFemaleNameInfoType->setName('US_FEMALE_NAME');
-    $infoTypes = [$usMaleNameInfoType, $usFemaleNameInfoType];
+    $usNameInfoType = new InfoType();
+    $usNameInfoType->setName('US_CENSUS_NAME');
+    $usStateInfoType = new InfoType();
+    $usStateInfoType->setName('US_STATE');
+    $infoTypes = [$usNameInfoType, $usStateInfoType];
 
     // Whether to include the matching string in the response
     $includeQuote = true;
 
+    // Specify finding limits
+    $limits = new InspectConfig_FindingLimits(); // TODO blech...can we make this a dot property?
+    $limits->setMaxFindingsPerRequest($maxFindings);
+
     // Create the configuration object
     $inspectConfig = new InspectConfig();
     $inspectConfig->setMinLikelihood($minLikelihood);
-    $inspectConfig->setMaxFindings($maxFindings);
+    $inspectConfig->setLimits($limits);
     $inspectConfig->setInfoTypes($infoTypes);
     $inspectConfig->setIncludeQuote($includeQuote);
 
@@ -58,14 +64,19 @@ function inspect_string(
     $content->setType('text/plain');
     $content->setValue($string);
 
+    $parent = $dlp->projectName($callingProject);
+
     // Run request
-    $response = $dlp->inspectContent($inspectConfig, [$content]);
+    $response = $dlp->inspectContent($parent, Array(
+        'inspectConfig' => $inspectConfig,
+        'item' => $content
+    ));
 
     $likelihoods = ['Unknown', 'Very unlikely', 'Unlikely', 'Possible',
                     'Likely', 'Very likely'];
 
     // Print the results
-    $findings = $response->getResults()[0]->getFindings();
+    $findings = $response->getResult()->getFindings();
     if (count($findings) == 0) {
         print('No findings.' . PHP_EOL);
     } else {
